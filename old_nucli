@@ -1,27 +1,6 @@
 #!/usr/bin/env nu
 
-let debug = true
-
-def --wrapped main [
-  ...args
-] {
-  let cli = parse-cli [
-    '--one (-1)'
-    '--two (-2)'
-    '--three (-3): string # an arg that takes a value'
-    'firstpos'
-    'secondpos'
-    '...other'
-  ] $args
-  print -e "parsed args:"
-  $cli | table -ed 2
-}
-
-# --one --two=false --three value pos1
-# -1 -2 -3 value pos1
-# -123 value pos1
-
-def parse-cli [
+export def parse-cli [
   --header: string
   --footer: string
   textconfig
@@ -103,6 +82,8 @@ def parse-cli [
     for $pos in $config_positionals {
       if $pos.rest {
         print -en $' [($pos.name) ...]'
+      } else if $pos.escaped {
+        print -en $' -- [($pos.name) ...]'
       } else {
         print -en $' <($pos.name)>'
       }
@@ -128,6 +109,11 @@ def parse-cli [
         let maybe_desc = if ($flag.description | is-empty | not $in) { $'(ansi reset) - ($flag.description)' } else { '' }
         print -e $'  (ansi cyan)--($flag.name)($maybe_short)($maybe_value)($maybe_desc)'
       }
+    }
+
+    if ($footer | is-empty | not $in) {
+      print -en "\n"
+      print -e $footer
     }
   }
 
@@ -184,13 +170,17 @@ def parse-cli [
     return ($pp | append { name: $flagconfig.name, value: $arg })
   }
 
-  let split = $args | split list '--'
-  let args = if (($split | length) < 2) { $args } else { $split.0 }
-  let escaped = if (($split | length) < 2) { [] } else { $split.1 }
-
   mut parsed_flags = []
   mut parsed_positionals = []
   mut positional = 0
+  mut args = $args
+
+  if (($escaped_name | is-empty | not $in) and ('--' in $args)) {
+    let split = $args | split list '--'
+    $args = $split.0
+    let escaped = $split.1
+    $parsed_positionals = ($parsed_positionals | append { name: $escaped_name, value: $escaped })
+  }
 
   mut i = 0
   let total = $args | length
@@ -242,11 +232,11 @@ def parse-cli [
     $positional = $positional + 1
   }
 
-  { flags: $parsed_flags, pos: $parsed_positionals, escaped: $escaped }
+  { flags: $parsed_flags, pos: $parsed_positionals }
 }
 
 def log [...args] {
-  if $debug {
+  if true {
     print -e ('- ' + ($args | str join ' '))
   }
 }
